@@ -64,8 +64,6 @@ CONFIG_SCHEMA = {
                "help": "Market window duration (5m or 15m)"},
     "volume_confidence": {"default": True, "env": "SIMMER_SPRINT_VOL_CONF", "type": bool,
                           "help": "Weight signal by volume (higher volume = more confident)"},
-    "daily_budget": {"default": 10.0, "env": "SIMMER_SPRINT_DAILY_BUDGET", "type": float,
-                     "help": "Max total spend per UTC day"},
 }
 
 TRADE_SOURCE = "sdk:fastloop"
@@ -150,38 +148,6 @@ MIN_TIME_REMAINING = cfg["min_time_remaining"]
 ASSET = cfg["asset"].upper()
 WINDOW = cfg["window"]  # "5m" or "15m"
 VOLUME_CONFIDENCE = cfg["volume_confidence"]
-DAILY_BUDGET = cfg["daily_budget"]
-
-
-# =============================================================================
-# Daily Budget Tracking
-# =============================================================================
-
-def _get_spend_path(skill_file):
-    from pathlib import Path
-    return Path(skill_file).parent / "daily_spend.json"
-
-
-def _load_daily_spend(skill_file):
-    """Load today's spend. Resets if date != today (UTC)."""
-    spend_path = _get_spend_path(skill_file)
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    if spend_path.exists():
-        try:
-            with open(spend_path) as f:
-                data = json.load(f)
-            if data.get("date") == today:
-                return data
-        except (json.JSONDecodeError, IOError):
-            pass
-    return {"date": today, "spent": 0.0, "trades": 0}
-
-
-def _save_daily_spend(skill_file, spend_data):
-    """Save daily spend to file."""
-    spend_path = _get_spend_path(skill_file)
-    with open(spend_path, "w") as f:
-        json.dump(spend_data, f, indent=2)
 
 
 # =============================================================================
@@ -511,8 +477,6 @@ def run_fast_market_strategy(dry_run=True, positions_only=False, show_config=Fal
     log(f"  Lookback:         {LOOKBACK_MINUTES} minutes")
     log(f"  Min time left:    {MIN_TIME_REMAINING}s")
     log(f"  Volume weighting: {'✓' if VOLUME_CONFIDENCE else '✗'}")
-    daily_spend = _load_daily_spend(__file__)
-    log(f"  Daily budget:     ${DAILY_BUDGET:.2f} (${daily_spend['spent']:.2f} spent today, {daily_spend['trades']} trades)")
 
     if show_config:
         config_path = _get_config_path(__file__)
@@ -656,22 +620,6 @@ def run_fast_market_strategy(dry_run=True, positions_only=False, show_config=Fal
     position_size = calculate_position_size(api_key, MAX_POSITION_USD, smart_sizing)
     price = market_yes_price if side == "yes" else (1 - market_yes_price)
 
-    # Daily budget check
-    remaining_budget = DAILY_BUDGET - daily_spend["spent"]
-    if remaining_budget <= 0:
-        log(f"  ⏸️  Daily budget exhausted (${daily_spend['spent']:.2f}/${DAILY_BUDGET:.2f} spent) — skip")
-        if not quiet:
-            print(f"📊 Summary: No trade (daily budget exhausted)")
-        return
-    if position_size > remaining_budget:
-        position_size = remaining_budget
-        log(f"  Budget cap: trade capped at ${position_size:.2f} (${daily_spend['spent']:.2f}/${DAILY_BUDGET:.2f} spent)")
-    if position_size < 0.50:
-        log(f"  ⏸️  Remaining budget ${position_size:.2f} < $0.50 — skip")
-        if not quiet:
-            print(f"📊 Summary: No trade (remaining budget too small)")
-        return
-
     # Check minimum order size
     if price > 0:
         min_cost = MIN_SHARES_PER_ORDER * price
@@ -703,11 +651,6 @@ def run_fast_market_strategy(dry_run=True, positions_only=False, show_config=Fal
             shares = result.get("shares_bought") or result.get("shares") or 0
             trade_id = result.get("trade_id")
             log(f"  ✅ Bought {shares:.1f} {side.upper()} shares @ ${price:.3f}", force=True)
-
-            # Update daily spend
-            daily_spend["spent"] += position_size
-            daily_spend["trades"] += 1
-            _save_daily_spend(__file__, daily_spend)
 
             # Log to trade journal
             if trade_id and JOURNAL_AVAILABLE:
