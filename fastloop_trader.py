@@ -753,7 +753,7 @@ def run_fast_market_strategy(dry_run=True, positions_only=False, show_config=Fal
 
 
 # =============================================================================
-# CLI Entry Point (1-minute infinite loop)
+# CLI Entry Point
 # =============================================================================
 
 if __name__ == "__main__":
@@ -790,24 +790,16 @@ if __name__ == "__main__":
                 print(f"Unknown config key: {key}")
                 print(f"Valid keys: {', '.join(CONFIG_SCHEMA.keys())}")
                 sys.exit(1)
-        _update_config(updates, __file__)
+        result = _update_config(updates, __file__)
         print(f"✅ Config updated: {json.dumps(updates)}")
         sys.exit(0)
 
     dry_run = not args.live
 
-    print("🚀 Railway 1-Minute Infinite Loop Activated")
-    print("=" * 50)
-
-    while True:
-        try:
-            run_fast_market_strategy(
-                dry_run=dry_run,
-                positions_only=args.positions,
-                smart_sizing=args.smart-sizing,
-                quiet=args.quiet,
-            )
-        except Exception as e:
-            print(f"🔥 Unexpected crash in loop: {e}")
-
-        time.sleep(60)  # 1 minute high-frequency cycle
+    run_fast_market_strategy(
+        dry_run=dry_run,
+        positions_only=args.positions,
+        show_config=args.config,
+        smart_sizing=args.smart_sizing,
+        quiet=args.quiet,
+    )
