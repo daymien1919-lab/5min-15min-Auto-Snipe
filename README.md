@@ -2,10 +2,11 @@
 name: polymarket-fast-loop
 displayName: Polymarket FastLoop Trader
 description: Trade Polymarket BTC 5-minute and 15-minute fast markets using CEX price momentum signals via Simmer API. Default signal is Binance BTC/USDT klines. Use when user wants to trade sprint/fast markets, automate short-term crypto trading, or use CEX momentum as a Polymarket signal.
-metadata: {"clawdbot":{"emoji":"⚡","requires":{"env":["SIMMER_API_KEY"],"pip":["simmer-sdk"]},"cron":null,"autostart":false}}
+metadata: {"clawdbot":{"emoji":"⚡","requires":{"env":["SIMMER_API_KEY"],"pip":["simmer-sdk"]},"cron":null,"autostart":false,"automaton":{"managed":true,"entrypoint":"fastloop_trader.py"},"tunables":[{"env":"SIMMER_FASTLOOP_ENTRY_THRESHOLD","type":"number","default":0.05,"range":[0.01,0.30],"step":0.01,"label":"Entry edge threshold"},{"env":"SIMMER_FASTLOOP_MOMENTUM_THRESHOLD","type":"number","default":0.03,"range":[0.01,0.20],"step":0.01,"label":"Momentum threshold"},{"env":"SIMMER_FASTLOOP_MAX_POSITION_USD","type":"number","default":50,"range":[1,200],"step":5,"label":"Max position size"},{"env":"SIMMER_FASTLOOP_LOOKBACK_MINUTES","type":"number","default":30,"range":[5,120],"step":5,"label":"Lookback window (minutes)"},{"env":"SIMMER_FASTLOOP_MIN_TIME_BETWEEN_TRADES_SEC","type":"number","default":60,"range":[10,600],"step":10,"label":"Min time between trades (seconds)"},{"env":"SIMMER_FASTLOOP_DAILY_BUDGET_USD","type":"number","default":100,"range":[10,500],"step":10,"label":"Daily budget"},{"env":"SIMMER_FASTLOOP_VOL_CONFIDENCE_MIN","type":"number","default":0.5,"range":[0.1,1.0],"step":0.05,"label":"Minimum volatility confidence"}]}}
 authors:
   - Simmer (@simmer_markets)
-version: "1.0.10"
+version: "1.2.0"
+difficulty: advanced
 published: true
 ---
 
@@ -80,14 +81,24 @@ python fastloop_trader.py --live --smart-sizing --quiet
 
 The script runs **one cycle** — your bot drives the loop. Set up a cron job or heartbeat:
 
-**Every 5 minutes (one per fast market window):**
+**Linux crontab** (local/VPS installs):
 ```
+# Every 5 minutes (one per fast market window)
 */5 * * * * cd /path/to/skill && python fastloop_trader.py --live --quiet
+
+# Every 1 minute (more aggressive, catches mid-window opportunities)
+* * * * * cd /path/to/skill && python fastloop_trader.py --live --quiet
 ```
 
-**Every 1 minute (more aggressive, catches mid-window opportunities):**
-```
-* * * * * cd /path/to/skill && python fastloop_trader.py --live --quiet
+**OpenClaw native cron** (containerized or OpenClaw-managed setups):
+```bash
+openclaw cron add \
+  --name "Fast Loop Trader" \
+  --cron "*/5 * * * *" \
+  --tz "UTC" \
+  --session isolated \
+  --message "Run fast loop trader: cd /path/to/skill && python fastloop_trader.py --live --quiet. Show the output summary." \
+  --announce
 ```
 
 **Via OpenClaw heartbeat:** Add to your HEARTBEAT.md:
